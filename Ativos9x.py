@@ -2,6 +2,8 @@ import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
+from yahooquery import Ticker
+
 import pandas_datareader as pdr
 import pandas as pd
 import time
@@ -18,14 +20,11 @@ def AnaliseAtivo(sAtivo):
         # Não será contado o dia de "HOJE" para não pegar pregão em andamento, sempre o hoje-1
         # dfAtivo30Dias = pdr.get_data_yahoo(Ativo + '.SA',
 
-        dfAtivo30Dias = pdr.DataReader(sAtivo + '.SA', 'yahoo',
-                                       start=(datetime.now() - timedelta(30)).strftime('%Y, %m, %d'),
-                                       end=(datetime.now() - timedelta(1)).strftime('%Y, %m, %d')
-                                       )
+        dfAtivo30Dias = Ticker(sAtivo + '.SA').history(start=(datetime.now() - timedelta(30)).strftime('%Y-%m-%d'),
+                                                       end=(datetime.now() - timedelta(0)).strftime(
+                                                           '%Y-%m-%d')).dropna()
     except:
         return
-
-    dfAtivo30Dias = dfAtivo30Dias.dropna()
 
     # Calculo de Média Móvel Curta Exponencial
     # Pandas permite o calculo da média exponencial (EWM) direto no dataframe sem necessidade de funções a parte
@@ -33,7 +32,7 @@ def AnaliseAtivo(sAtivo):
     # lPeriodos = (9, 21, 51, 200)
     lPeriodos = (9, 21)
     for nPeriodos in lPeriodos:
-        dfAtivo30Dias['MME' + str(nPeriodos)] = dfAtivo30Dias.Close.ewm(span=nPeriodos).mean().dropna()
+        dfAtivo30Dias['MME' + str(nPeriodos)] = dfAtivo30Dias.close.ewm(span=nPeriodos).mean().dropna()
 
     ## Slop of MME
     # dfTendencia > 0 diz que a MME9 está para cima ou tendência de alta
@@ -44,26 +43,27 @@ def AnaliseAtivo(sAtivo):
     # com mais precisão a tendência de alta ou de baixa.
     dfTendencia = dfAtivo30Dias.MME9 - dfAtivo30Dias.shift(1).MME9
 
-
     # Se o candle atravessa a MME9 então é candidato a ser um sinal 9.1 Se atravessa
     #   (fecha acima da MME9) e
     # dfTendencia > 0 então é um 9.1 de compra com disparo da ordem na máxima do candle corrente mais 1 centavo ou tick
     # Esse mais 1 centavo é recomendação do Palex para melhorar a taxa de acerto
+
     dfAtivo30Dias['mark_max'] = np.where(
-        (dfAtivo30Dias.MME9 < dfAtivo30Dias.Close) &
-        (dfAtivo30Dias.MME9 > dfAtivo30Dias.Open) &
+        (dfAtivo30Dias.MME9 < dfAtivo30Dias.close) &
+        (dfAtivo30Dias.MME9 > dfAtivo30Dias.open) &
         (dfTendencia > 0),
-        dfAtivo30Dias.High + 0.01,
+        dfAtivo30Dias.high + 0.01,
         0
     )
+
     # Se atravessa (fecha abaixo da MME9) e dfTendencia < 0 então é um 9.1 de venda com disparo da ordem de venda na
     # mínima mais 1 centavo ou tick do candle corrente
     # Esse mais 1 centavo é recomendação do Palex para melhorar a taxa de acerto
     dfAtivo30Dias['mark_min'] = np.where(
-        (dfAtivo30Dias.MME9 > dfAtivo30Dias.Open) &
-        (dfAtivo30Dias.MME9 < dfAtivo30Dias.Close) &
+        (dfAtivo30Dias.MME9 > dfAtivo30Dias.open) &
+        (dfAtivo30Dias.MME9 < dfAtivo30Dias.close) &
         (dfTendencia < 0),
-        dfAtivo30Dias.Low - 0.01,
+        dfAtivo30Dias.low - 0.01,
         0
     )
 
@@ -84,25 +84,25 @@ def AnaliseAtivo(sAtivo):
     # Pegar preços de saida
     dfAtivo30Dias['buy_stop'] = np.where(
         (dfAtivo30Dias.mark_max > 0),
-        dfAtivo30Dias.Low,
+        dfAtivo30Dias.low,
         0
     )
     dfAtivo30Dias['sell_stop'] = np.where(
         (dfAtivo30Dias.mark_min > 0),
-        dfAtivo30Dias.High,
+        dfAtivo30Dias.high,
         0
     )
 
     dfUltimoNegocio = dfAtivo30Dias.tail(1)
-
     if dfUltimoNegocio.buy_start[0] > 0:
         sStart = "R${:,.2f}".format(dfUltimoNegocio.buy_start[0])
         sStop = "R${:,.2f}".format(dfUltimoNegocio.buy_stop[0])
-        print(sAtivo, 'Compra', dfUltimoNegocio.index[0].strftime("%d/%m/%Y"), sStart, sStop)
+        print(sAtivo, 'Compra', dfUltimoNegocio.index[0][1].strftime("%d/%m/%Y"), sStart, sStop)
+
     if dfUltimoNegocio.sell_start[0] > 0:
         sStart = "R${:,.2f}".format(dfUltimoNegocio.sell_start[0])
         sStop = "R${:,.2f}".format(dfUltimoNegocio.sell_stop[0])
-        print(sAtivo, 'Venda', dfUltimoNegocio.index[0].strftime("%d/%m/%Y"), sStart, sStop)
+        print(sAtivo, 'Venda', dfUltimoNegocio.index[0][1].strftime("%d/%m/%Y"), sStart, sStop)
 
 
 def main():
@@ -126,5 +126,4 @@ def main():
     print(f'Finalização em {tFinal - tInicio} segundos')
 
 
-if __name__ == '__main__':
-    main()
+main()
