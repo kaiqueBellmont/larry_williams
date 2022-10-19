@@ -105,25 +105,4 @@ def AnaliseAtivo(sAtivo):
         print(sAtivo, 'Venda', dfUltimoNegocio.index[0][1].strftime("%d/%m/%Y"), sStart, sStop)
 
 
-def main():
-    tInicio = time.perf_counter()
 
-    # Lista de ativos a serem rastreados na B3
-    # Essa lista foi gerada a partir do próprio site da B3
-    # Pode-se criar sua própria lista usando a primeira coluna com o nome do ativo desejado.
-    dfSymbols = pd.read_csv('AtivosB3.csv', sep=';')
-
-    # DataFram para lista dos ativos detectados como 9.1 no último pregão
-    dfResultado = pd.DataFrame(columns=['Ativo', 'Operação', 'Dia', 'Start', 'Stop'])
-
-    print('Possíveis 9.1 de Compra/Venda')
-
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        executor.map(AnaliseAtivo, dfSymbols.Asset)
-
-    tFinal = time.perf_counter()
-
-    print(f'Finalização em {tFinal - tInicio} segundos')
-
-
-main()
